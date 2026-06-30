@@ -46,6 +46,9 @@ Item {
     id: chat
     property string peerName: ""   // from daemon's NOSTR_CHAT_DISPLAY_NAME
     property bool streaming: false
+    property int relaysUp: 0
+    property int relaysTotal: 0
+    property var relays: []        // connected URLs, for the header tooltip
     property string lastError: ""
     property var messages: []   // [{id, from, text, ts, ack, image, replyTo, state, tries}]
     property var replyTarget: null  // {id, text} — set by Panel when user clicks a bubble
@@ -99,25 +102,43 @@ Item {
   // A disconnect (daemon restart, suspend) just triggers the reconnect
   // timer — next connect replays again, so the ListView converges
   // without any booted/handshake dance.
-  Socket {
+  //
+  // Loader wrapper: Quickshell's Socket keeps its QLocalSocket alive
+  // after a failed connect (errorOccurred fires, disconnected doesn't),
+  // and setConnected(true) only dials when that pointer is null — so
+  // one refused/not-found leaves it wedged forever. Recreating the
+  // whole Socket is the only QML-side way to drop the stale handle.
+  Loader {
     id: sock
-    path: root.sockPath
-    connected: true
-
-    parser: SplitParser { onRead: line => root.recv(line) }
-
-    onConnectionStateChanged: {
-      if (connected) {
-        reconnect.interval = 500;
-        sockSend({ cmd: root.cmd.replay, n: root.cfg("maxHistory") || 200 });
-      } else {
-        chat.streaming = false;
+    sourceComponent: sockComponent
+    readonly property bool connected: item?.connected ?? false
+  }
+  Component {
+    id: sockComponent
+    Socket {
+      path: root.sockPath
+      connected: true
+      parser: SplitParser { onRead: line => root.recv(line) }
+      onConnectionStateChanged: {
+        if (connected) {
+          reconnect.stop();
+          reconnect.interval = 500;
+          chat.lastError = "";
+          // sock.item may still be null here (Loader hasn't published
+          // it yet when QLocalSocket connects synchronously during
+          // construction), so write through `this`, not sockSend().
+          write(JSON.stringify({ cmd: root.cmd.replay, n: root.cfg("maxHistory") || 200 }) + "\n");
+          flush();
+        } else {
+          chat.streaming = false;
+          reconnect.start();
+        }
+      }
+      onError: (e) => {
+        chat.lastError = "daemon unreachable";
+        Logger.w("NostrChat", "socket", e, "path", path);
         reconnect.start();
       }
-    }
-    onError: (e) => {
-      chat.lastError = "daemon unreachable";
-      Logger.w("NostrChat", "socket", e, "path", path);
     }
   }
   Timer {
@@ -125,12 +146,17 @@ Item {
     interval: 500
     // Cap under the daemon's RestartSec so we're waiting when it
     // returns, not the other way round.
-    onTriggered: { sock.connected = true; interval = Math.min(interval * 2, 4000); }
+    onTriggered: {
+      // Tear down and rebuild — see Loader comment for why a simple
+      // `connected = true` can't recover from a refused connect.
+      sock.active = false; sock.active = true;
+      interval = Math.min(interval * 2, 4000);
+    }
   }
   function sockSend(c) {
-    if (!sock.connected) return;  // replay-on-connect covers the gap
-    sock.write(JSON.stringify(c) + "\n");
-    sock.flush();
+    if (!sock.item?.connected) return;  // replay-on-connect covers the gap
+    sock.item.write(JSON.stringify(c) + "\n");
+    sock.item.flush();
   }
 
   // One NDJSON line from the daemon.
@@ -141,8 +167,11 @@ Item {
 
     switch (ev.kind) {
     case root.ev.status:
-      chat.streaming = ev.streaming;
-      chat.peerName = ev.name || chat.peerName;
+      chat.streaming   = ev.streaming;
+      chat.relaysUp    = ev.relaysUp || 0;
+      chat.relaysTotal = ev.relaysTotal || chat.relaysTotal;
+      chat.relays      = ev.relays || [];
+      chat.peerName    = ev.name || chat.peerName;
       break;
 
     case root.ev.msg: {

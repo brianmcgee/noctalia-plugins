@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Services.UI
 import qs.Widgets
 import "MsgText.js" as Txt
 
@@ -73,12 +74,16 @@ Item {
         Layout.fillWidth: true
         NText {
           text: root.peerName
-          font.pixelSize: Style.fontSizeL
+          pointSize: Style.fontSizeL
           font.bold: true
         }
         NText {
-          text: chat?.streaming ? root.tr("panel.status-connected") : root.tr("panel.status-offline")
-          font.pixelSize: Style.fontSizeXS
+          // "connected · 2/3" — the count is locale-neutral so we don't
+          // have to thread args through every translation.
+          text: chat?.streaming
+            ? root.tr("panel.status-connected") + " \u00b7 " + chat.relaysUp + "/" + chat.relaysTotal
+            : root.tr("panel.status-offline")
+          pointSize: Style.fontSizeXS
           color: Color.mOnSurfaceVariant
         }
       }
@@ -89,8 +94,18 @@ Item {
         onClicked: { searchBar.visible = !searchBar.visible; if (searchBar.visible) searchField.forceActiveFocus(); }
       }
       Rectangle {
+        id: relayDot
         implicitWidth: 8; implicitHeight: 8; radius: 4
-        color: chat?.streaming ? Color.mTertiary : Color.mError
+        // green = all relays up, amber = degraded, red = none.
+        color: !chat?.streaming ? Color.mError
+             : (chat.relaysUp < chat.relaysTotal ? Color.mSecondary : Color.mTertiary)
+        HoverHandler {
+          onHoveredChanged: hovered
+            ? TooltipService.show(relayDot,
+                chat?.relays?.length ? chat.relays.join("\n")
+                                     : root.tr("panel.status-offline"))
+            : TooltipService.hide(relayDot)
+        }
       }
     }
 
@@ -155,7 +170,7 @@ Item {
           ? (searchBar.hits.indexOf(searchBar.current) + 1) + "/" + searchBar.hits.length
           : (searchField.text ? "0" : "")
         color: Color.mOnSurfaceVariant
-        font.pixelSize: Style.fontSizeS
+        pointSize: Style.fontSizeS
       }
       NIconButton { icon: "chevron-up";   baseSize: Style.baseWidgetSize * 0.8; onClicked: searchBar.step(1) }
       NIconButton { icon: "chevron-down"; baseSize: Style.baseWidgetSize * 0.8; onClicked: searchBar.step(-1) }
@@ -250,7 +265,7 @@ Item {
         NText {
           text: root.tr("panel.new-messages", { count: history.unseen })
           color: Color.mOnPrimary
-          font.pixelSize: Style.fontSizeS
+          pointSize: Style.fontSizeS
           font.bold: true
         }
         NIcon { icon: "chevron-down"; color: Color.mOnPrimary }
@@ -279,7 +294,7 @@ Item {
           Layout.fillWidth: true
           text: Txt.snippet(chat?.replyTarget?.text ?? "", 80)
           elide: Text.ElideRight
-          font.pixelSize: Style.fontSizeS
+          pointSize: Style.fontSizeS
           color: Color.mOnSurfaceVariant
         }
         NIconButton {
@@ -438,7 +453,7 @@ Item {
       visible: (chat?.lastError ?? "") !== ""
       text: chat?.lastError ?? ""
       color: Color.mError
-      font.pixelSize: Style.fontSizeS
+      pointSize: Style.fontSizeS
       Layout.fillWidth: true
       wrapMode: Text.Wrap
     }
@@ -449,7 +464,7 @@ Item {
   // Ctrl+F from anywhere in the panel. Shortcut rather than Keys so it
   // fires regardless of which TextArea currently has focus.
   Shortcut {
-    sequence: StandardKey.Find
+    sequences: [StandardKey.Find]
     enabled: root.visible
     onActivated: { searchBar.visible = true; searchField.forceActiveFocus(); }
   }
