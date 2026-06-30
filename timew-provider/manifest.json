@@ -1,0 +1,20 @@
+{
+  "id": "timew-provider",
+  "name": "Timewarrior",
+  "version": "1.0.0",
+  "author": "Brian McGee",
+  "official": false,
+  "license": "MIT",
+  "description": "Start, stop and inspect Timewarrior time tracking from the launcher",
+  "tags": ["Launcher", "Productivity"],
+  "minNoctaliaVersion": "4.5.0",
+  "entryPoints": {
+    "launcherProvider": "LauncherProvider.qml"
+  },
+  "dependencies": {
+    "plugins": []
+  },
+  "metadata": {
+    "commandPrefix": "tw"
+  }
+}

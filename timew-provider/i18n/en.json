@@ -1,0 +1,28 @@
+{
+  "provider-name": "Timewarrior",
+  "command-description": "Track time with Timewarrior",
+  "status": {
+    "tracking-name": "Tracking",
+    "idle-name": "Not tracking",
+    "idle-description": "No active tracking — type tags after >tw to start"
+  },
+  "actions": {
+    "start-name": "Start: {tags}",
+    "start-description": "Start tracking with these tags",
+    "stop-name": "Stop",
+    "stop-description": "Stop the active tracking and record it",
+    "continue-name": "Continue",
+    "continue-description": "Resume the most recently closed interval",
+    "cancel-name": "Cancel",
+    "cancel-description": "Discard the active tracking without recording"
+  },
+  "toast": {
+    "started": "Started tracking",
+    "stopped": "Stopped tracking",
+    "continued": "Resumed tracking",
+    "canceled": "Canceled tracking"
+  },
+  "error": {
+    "command-failed": "timew command failed"
+  }
+}
